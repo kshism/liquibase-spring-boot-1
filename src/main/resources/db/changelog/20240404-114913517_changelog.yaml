@@ -1,0 +1,11 @@
+databaseChangeLog:
+- changeSet:
+    id: 1712231357217-1
+    author: Nemo
+    changes:
+    - addColumn:
+        columns:
+        - column:
+            name: address
+            type: varchar(255)
+        tableName: students
