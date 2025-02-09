@@ -1,0 +1,9 @@
+SELECT nspname AS schema_name, 
+       r.rolname AS role_name, 
+       pg_catalog.array_agg(privilege_type) AS privileges
+FROM pg_catalog.pg_namespace n
+JOIN pg_catalog.pg_roles r ON r.oid = n.nspowner
+LEFT JOIN information_schema.role_schema_grants g 
+    ON g.schema_name = n.nspname AND g.grantee = r.rolname
+WHERE nspname = 'your_schema_name'
+GROUP BY nspname, r.rolname;
