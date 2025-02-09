@@ -7,3 +7,17 @@ LEFT JOIN information_schema.role_schema_grants g
     ON g.schema_name = n.nspname AND g.grantee = r.rolname
 WHERE nspname = 'your_schema_name'
 GROUP BY nspname, r.rolname;
+
+
+
+SELECT 
+    r.rolname AS role_name,
+    n.nspname AS schema_name,
+    has_schema_privilege(r.rolname, n.nspname, 'USAGE') AS usage_privilege,
+    has_schema_privilege(r.rolname, n.nspname, 'CREATE') AS create_privilege
+FROM 
+    pg_namespace n,
+    pg_roles r
+WHERE 
+    n.nspname = 'your_schema_name'
+    AND r.rolname NOT LIKE 'pg_%'; -- Exclude system roles
