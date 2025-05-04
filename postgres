@@ -21,3 +21,62 @@ FROM
 WHERE 
     n.nspname = 'your_schema_name'
     AND r.rolname NOT LIKE 'pg_%'; -- Exclude system roles
+
+
+Recommended Approach to Archive Liquibase Changelog Files
+1. Identify a Logical Cut-off Point
+Choose a milestone (e.g., a major release, or "all changes deployed to production before YYYY-MM-DD") to determine which changelogs are considered stable and can be archived.
+
+2. Squash and Archive Old Changes
+You can consolidate old changelogs into a single baseline changelog that reflects the current state of the schema up to that point.
+
+Steps:
+Export the Current Schema:
+Run Liquibase to generate a snapshot of the schema:
+
+bash
+Copy
+Edit
+liquibase --url=jdbc:postgresql://... --username=... --password=... snapshot --format=yaml > baseline.yaml
+(You can also use diffChangeLog if you have a reference database.)
+
+Review and Clean Up:
+Manually review baseline.yaml to ensure it's clean and represents the schema accurately. Remove any unnecessary metadata or artifacts.
+
+Create a New Baseline File:
+Save the reviewed file as db/changelog/baseline/baseline-changelog.yaml.
+
+Replace Older Changelogs in the Master File:
+Update your db.changelog-master.yaml:
+
+yaml
+Copy
+Edit
+databaseChangeLog:
+  - include: path: db/changelog/baseline/baseline-changelog.yaml
+  - include: path: db/changelog/changes/after-baseline-change1.yaml
+  - include: path: db/changelog/changes/after-baseline-change2.yaml
+You can move the old individual changelog files to an archive folder (db/changelog/archive/) for historical purposes.
+
+Tag the Baseline (optional but useful):
+Tag the database after applying the baseline:
+
+bash
+Copy
+Edit
+liquibase tag baseline-v1
+3. Test Thoroughly
+Before finalizing:
+
+Run a fresh database build from the new baseline and verify the schema.
+
+Compare it with a database built using the full original changelog history to ensure parity.
+
+🔁 Going Forward
+To keep it maintainable:
+
+Periodically repeat this archiving/squashing process.
+
+Use naming conventions (e.g., v1-changes.yaml, v2-changes.yaml) for each cycle.
+
+Keep the changelog tree shallow to improve readability.
