@@ -80,3 +80,66 @@ Periodically repeat this archiving/squashing process.
 Use naming conventions (e.g., v1-changes.yaml, v2-changes.yaml) for each cycle.
 
 Keep the changelog tree shallow to improve readability.
+
+
+
+XML 
+
+
+Choose a Baseline Point
+Decide a logical cutoff (e.g., "all changes before March 2024") to define the scope of what will be archived/squashed.
+
+2. Generate a Baseline Changelog in XML
+You have two options:
+
+Option A: Use diffChangeLog between a clean DB and a reference DB
+If you have a current production or staging database, generate a new XML changelog reflecting its state:
+
+bash
+Copy
+Edit
+liquibase --url=jdbc:postgresql://... --username=... --password=... \
+  --referenceUrl=jdbc:postgresql://... --referenceUsername=... --referencePassword=... \
+  diffChangeLog --changeLogFile=baseline-changelog.xml
+This creates a file like:
+
+xml
+Copy
+Edit
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="
+       http://www.liquibase.org/xml/ns/dbchangelog
+       http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.3.xsd">
+
+    <changeSet id="1" author="liquibase">
+        <!-- schema changes like createTable, addColumn, etc. -->
+    </changeSet>
+
+</databaseChangeLog>
+Review it for accuracy — it's often verbose.
+
+Option B: Manually extract existing changes
+Manually copy relevant changesets from old files into a single baseline-changelog.xml. Keep original id and author or change them to reflect the squash. This is more work but avoids duplicate statements.
+
+3. Update the Master Changelog
+Replace the old file references with the new baseline:
+
+xml
+Copy
+Edit
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="
+       http://www.liquibase.org/xml/ns/dbchangelog
+       http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.3.xsd">
+
+    <include file="changelog/baseline/baseline-changelog.xml"/>
+    <include file="changelog/after-baseline-change1.xml"/>
+    <include file="changelog/after-baseline-change2.xml"/>
+
+</databaseChangeLog>
+Move the old changelogs to an archive/ folder (don’t delete yet — just remove them from the main include list).
+
