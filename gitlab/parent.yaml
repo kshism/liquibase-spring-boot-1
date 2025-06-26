@@ -1,0 +1,16 @@
+
+stages:
+  - trigger_child
+trigger_child_pipeline:
+  stage: trigger_child
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+  trigger:
+    project: kshism/ch_project
+    branch: main
+    strategy: depend
+    forward:
+      pipeline_variables: true
+  variables:
+    MR_ID: "$CI_MERGE_REQUEST_IID"
+    PARENT_PROJECT_ID: "71120919"

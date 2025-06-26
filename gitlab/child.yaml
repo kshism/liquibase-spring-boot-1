@@ -1,0 +1,33 @@
+stages:
+  - validate
+
+check_approvals:
+  stage: validate
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache curl jq
+  script:
+    - echo "Checking MR approvals from parent project $MR_ID"
+    - |
+      APPROVALS_JSON=$(curl --header "PRIVATE-TOKEN: $PAT" "$CI_API_V4_URL/projects/$PARENT_PROJECT_ID/merge_requests/$MR_ID/approvals")
+      echo "$APPROVALS_JSON" > approvals.json
+    - cat approvals.json
+    - APPROVAL_COUNT=$(jq '.approved_by | length' approvals.json)
+    - echo "Approved by- $APPROVAL_COUNT users"
+    - |
+      MR_JSON=$(curl --header "PRIVATE-TOKEN: $PAT" "$CI_API_V4_URL/projects/$PARENT_PROJECT_ID/merge_requests/$MR_ID")
+      echo "$MR_JSON" > mr_data.json
+    - cat mr_data.json
+    - HAS_NOT_FAIL=$(jq -r '.labels | index("NOT_FAIL") // empty' mr_data.json)
+    - echo "HAS_NOT_FAIL- $HAS_NOT_FAIL"
+    - |
+      if [ "$APPROVAL_COUNT" -lt 2 ] && [ -z "$HAS_NOT_FAIL" ]; then
+        echo "❌ Less than 2 approvals and 'NOT_FAIL' label not set. Failing job."
+        exit 1
+      else
+        echo "✅ Enough approvals or override label found. Passing."
+      fi
+  artifacts:
+    paths:
+      - mr_data.json
+      - approvals.json
