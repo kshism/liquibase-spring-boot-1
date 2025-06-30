@@ -1,0 +1,33 @@
+# Login (if not already logged in)
+Connect-AzAccount
+
+# Get all subscriptions
+$subscriptions = Get-AzSubscription
+
+# Prepare array to hold results
+$results = @()
+
+foreach ($sub in $subscriptions) {
+    Set-AzContext -SubscriptionId $sub.Id | Out-Null
+
+    # Get all VNets in the current subscription
+    $vnets = Get-AzVirtualNetwork
+
+    foreach ($vnet in $vnets) {
+        foreach ($subnet in $vnet.Subnets) {
+            $serviceEndpoints = $subnet.ServiceEndpoints | ForEach-Object { $_.Service }
+
+            $results += [PSCustomObject]@{
+                Subscription      = $sub.Name
+                ResourceGroup     = $vnet.ResourceGroupName
+                VNetName          = $vnet.Name
+                SubnetName        = $subnet.Name
+                ServiceEndpoints  = if ($serviceEndpoints) { ($serviceEndpoints -join ", ") } else { "None" }
+            }
+        }
+    }
+}
+
+# Output in table format
+$results | Format-Table -AutoSize
+$results | Export-Csv -Path "VNet_Service_Endpoints_Report.csv" -NoTypeInformation
