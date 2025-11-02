@@ -314,8 +314,13 @@ public class JsonExtractor {
                     throw new JsonExtractorException("Malformed JSON: Array not properly closed", 1);
                 }
 
+                // Ensure the last file is deleted if it is empty
                 if (!countOnly && writer != null) {
                     writer.close();
+                    Path lastFile = Paths.get(outPrefix + "." + String.format(SUFFIX_FORMAT, currentFileNumber) + ".ndjson");
+                    if (objectsInCurrentFile == 0 && Files.exists(lastFile)) {
+                        Files.delete(lastFile);
+                    }
                 }
 
                 return objectCount;
