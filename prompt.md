@@ -3,14 +3,14 @@ Act as an expert frontend engineer. Write a reusable component for a data table 
 Requirements:
 1. Default "Display Mode" (Read-Only State):
    - By default, the cell displays selected names as clean inline tags.
-   - If a name has an associated email, it must render as a functional hyperlink that opens Microsoft Teams: "https://microsoft.com" (target="_blank").
-   - If a name is a custom entry, render it as standard plain text.
+   - Hyperlink Logic: If a name has an associated email, it must render as a functional "mailto:" hyperlink that opens the user's default email client: "mailto:email@domain.com".
+   - If a name is a custom entry without an email, render it as standard plain text.
    - Double-clicking the cell or clicking an edit button must switch the component into "Edit Mode."
 
 2. "Edit Mode" UI & Keystroke-Driven Lookup:
-   - Upon entering Edit Mode, transform the cell into an interactive container enclosing a text input that expands vertically. Selected names should now display as pills with a "×" (cross) icon. Clicking "×" removes the tag (use stopPropagation).
+   - Upon entering Edit Mode, transform the cell into an interactive container enclosing a text input that expands vertically. Selected names should now display as pills with a "×" (cross) icon. Clicking "×" removes the tag (use stopPropagation to avoid triggering any parent actions).
    - Real-Time Filtering: As soon as the user types "@", open a dropdown menu directly below the input. 
-   - As the user continues typing characters after the "@", dynamically filter the names from a mock JSON database in real-time on every keystroke (input event). The dropdown must immediately shrink or grow to show only names containing the typed substring.
+   - As the user continues typing characters after the "@", dynamically filter names from a mock JSON database in real-time on every keystroke (input event). The dropdown must immediately shrink or grow to show only names containing the typed substring.
    - Exclude already-selected names from the lookup dropdown.
    - Fallback Logic: If no match is found for the typed text, show an "Add '[Typed Name]'" option in the dropdown and allow pressing 'Enter' to convert the raw text into a plain text tag.
 
@@ -22,5 +22,4 @@ Requirements:
    - Clicking "Cancel" must discard pending edits and restore the initial state.
 
 4. Tech Stack & Integration:
-   - Provide complete, self-contained code with HTML, clean CSS, and JavaScript. Include a mock JSON database array (id, name, email) to demonstrate the real-time input filtering, both display states, and the change detection logic.
-
+   - Provide complete, self-contained code with HTML, clean CSS, and JavaScript. Include a mock JSON database array (id, name, email) to demonstrate the real-time input filtering, mailto links, both display states, and change detection logic.
