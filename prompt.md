@@ -1,81 +1,136 @@
-# RFC Responsible Owner Management Feature
+# RFC Responsible Owner Management System
 
 ## Objective
 
-Implement a new **Responsible** column in the existing React Single Page Application hosted on GitLab Pages.
+Implement a complete Responsible Owner Management system for the existing React Single Page Application hosted on GitLab Pages.
 
-The feature allows users to assign, edit, remove, and manage one or more responsible owners for each RFC directly within the table.
+The solution must allow users to:
 
-The solution must support:
+* View responsible owners for an RFC
+* Add owners
+* Remove owners
+* Edit owners
+* Assign entire Pods
+* Assign custom users
+* Assign external users not present in lookup data
+* Generate Microsoft Teams hyperlinks automatically when email information is available
+* Track ownership changes
+* Persist ownership changes through GitLab CI/CD
+* Publish updates automatically to GitLab Pages
 
-* Multiple owners per RFC
-* User lookup and autocomplete
-* Pod-based assignment
-* Custom owners
-* Unknown users
-* Teams hyperlinks
-* Change detection
-* JSON export of changes
-* GitLab Pages static hosting constraints
-* Large datasets
+The application is entirely static and has no backend service.
 
-No backend API exists.
-
-All data is loaded from static JSON files.
-
-The application must track changes in memory and export modified RFC assignments for future GitLab CI processing.
+GitLab CI/CD acts as the persistence layer.
 
 ---
 
-# Core Design Principle
+# Architecture Overview
 
-Ownership assignments are free-form.
+The solution consists of:
 
-The lookup database is used only for:
+1. React UI
+2. Static JSON data
+3. GitLab Pipeline Trigger
+4. Ownership Processing Pipeline
+5. GitLab Pages Deployment
 
-* User discovery
-* Autocomplete
-* Pod expansion
-* Email enrichment
-* Teams hyperlink generation
+Flow:
 
-The lookup database must never restrict ownership assignment.
-
-Users must be able to assign:
-
-* Known users
-* Unknown users
-* Teams
-* Vendors
-* Groups
-* Custom text entries
-
-even when no matching lookup record exists.
+```text
+User edits Responsible owners
+        ↓
+User clicks Save
+        ↓
+React generates ownership change payload
+        ↓
+Trigger GitLab pipeline on feature/owners
+        ↓
+CI validates payload
+        ↓
+CI merges into data/owners.json
+        ↓
+CI commits changes
+        ↓
+CI pushes feature/owners
+        ↓
+fetch-data job runs
+        ↓
+React app rebuilt
+        ↓
+GitLab Pages refreshed
+```
 
 ---
 
-# Existing Application Context
+# Core Design Principles
 
-The application already displays RFC records in a table.
+1. Ownership assignments are free-form.
+2. The lookup database is only used for:
 
-Each row contains a unique RFC number.
+   * User discovery
+   * Autocomplete
+   * Pod expansion
+   * Email enrichment
+   * Teams hyperlink generation
+3. The lookup database must never restrict ownership assignment.
+4. Users must be able to assign:
+
+   * Known users
+   * Unknown users
+   * Vendors
+   * Contractors
+   * Teams
+   * Groups
+   * Custom text entries
+5. Failure to find a lookup record is not an error.
+6. React must never modify `data/owners.json` directly.
+7. GitLab CI is the only component allowed to update ownership data.
+
+---
+
+# RFC Data Model
+
+Each RFC row contains a unique RFC number.
 
 Example:
 
 ```json
 {
   "rfcNumber": "RFC-12345",
-  "title": "Implement New Authentication Service"
+  "title": "Implement Authentication Service"
 }
 ```
 
-RFC Number is the primary key used to associate responsible owners.
+RFC Number is the unique identifier used for ownership assignments.
+
+---
+
+# JSON Schemas
+
+```typescript
+export interface ResponsibleOwner {
+  name: string;
+  email?: string;
+}
+
+export interface LookupUser {
+  id?: string;
+  name: string;
+  email?: string;
+  podName?: string;
+}
+
+export type OwnersFile = Record<
+  string,
+  ResponsibleOwner[]
+>;
+```
 
 ---
 
 # Data Sources
 
-## Users Lookup File
+## User Lookup File
 
 Location:
 
@@ -110,14 +165,26 @@ Example:
 
 Rules:
 
+* id is optional
 * email may be empty
 * podName may be empty
 * podName is optional
 * multiple users may belong to the same pod
 
+Purpose:
+
+* User autocomplete
+* Pod lookup
+* Email enrichment
+* Teams link generation
+
+The UI is read-only with respect to users.json.
+
+Users cannot modify lookup data.
+
 ---
 
-## Owner Assignment File
+## Ownership File
 
 Location:
 
@@ -135,13 +202,12 @@ Example:
       "email": "john.smith@company.com"
     },
     {
-      "name": "Vendor Team"
+      "name": "Architecture Team"
     }
   ],
-  "RFC-54321": [
+  "RFC-98765": [
     {
-      "name": "Jane Doe",
-      "email": "jane.doe@company.com"
+      "name": "Michael Johnson"
     }
   ]
 }
@@ -149,21 +215,56 @@ Example:
 
 Rules:
 
-* RFC may not exist in the file
-* RFC may have an empty array
+* RFC may not exist
+* RFC may have zero owners
 * RFC may have one owner
-* RFC may have multiple owners
+* RFC may have many owners
+
+This file is the source of truth.
+
+---
+
+# GitLab Configuration Discovery
+
+The Responsible Owner feature must reuse the existing status.json file already loaded by the application.
+
+Example:
+
+```json
+{
+  "gitlab": {
+    "projectId": "12345",
+    "projectUrl": "https://gitlab.example.com/group/project",
+    "triggerUrl": "https://gitlab.example.com/api/v4/projects/12345/trigger/pipeline",
+    "triggerToken": "xxxxxxxxxxxxxxxx",
+    "ownershipBranch": "feature/owners"
+  }
+}
+```
+
+The application must:
+
+* Load status.json
+* Read GitLab configuration values
+* Use the configured trigger URL
+* Use the configured trigger token
+* Use the configured ownership branch
+* Avoid hardcoded project IDs, URLs, branch names, or tokens
+
+The trigger token must be a dedicated GitLab Pipeline Trigger Token.
+
+It must not be a Personal Access Token or Project Access Token.
 
 ---
 
 # Application Startup
 
-On application load:
+On application startup:
 
-1. Load RFC data
-2. Load users.json
-3. Load owners.json
-4. Merge owners into RFC rows using RFC number
+1. Load RFC dataset.
+2. Load users.json.
+3. Load owners.json.
+4. Merge ownership data into RFC rows using RFC number.
 
 Example:
 
@@ -184,7 +285,7 @@ Responsible
 
 Position:
 
-* Near end of table
+* Near the end of the table
 * Before Actions column if one exists
 
 ---
@@ -193,21 +294,19 @@ Position:
 
 Default state.
 
-## Assigned Owners
-
 Display owners as compact tags.
 
 Example:
 
 ```text
-[John Smith] [Vendor Team]
+[John Smith] [Architecture Team]
 ```
 
 ---
 
-## Teams Hyperlink Logic
+# Teams Hyperlink Generation
 
-If owner contains an email:
+If an owner contains an email:
 
 ```json
 {
@@ -219,19 +318,19 @@ If owner contains an email:
 Generate:
 
 ```text
-https://teams.microsoft.com/l/chat/0/0?users=<email>
+https://teams.microsoft.com/l/chat/0/0?users=john.smith@company.com
 ```
 
 Requirements:
 
-* Open new tab
+* Open in a new tab
 * rel="noopener noreferrer"
 
 ---
 
-## Automatic Email Resolution
+# Automatic Lookup Resolution
 
-If owner has no email:
+If an owner contains only a name:
 
 ```json
 {
@@ -239,7 +338,7 @@ If owner has no email:
 }
 ```
 
-Attempt lookup resolution.
+Attempt lookup enrichment.
 
 Match order:
 
@@ -247,36 +346,37 @@ Match order:
 2. Exact name
 3. Case-insensitive name
 
-If found:
+If a single unique match exists:
 
-```json
-{
-  "name": "John Smith",
-  "resolvedEmail": "john.smith@company.com"
-}
-```
+* Resolve email
+* Render Teams hyperlink
 
-Display as hyperlink.
+If no match exists:
+
+* Render as plain text
 
 ---
 
-## Unknown User Example
+# Lookup Ambiguity Handling
 
-```json
-{
-  "name": "Michael Johnson"
-}
+If multiple lookup users have the same name:
+
+Example:
+
+```text
+John Smith -> john.smith@company.com
+John Smith -> john.smith2@company.com
 ```
 
-If no lookup record exists:
+The system must not automatically resolve ownership.
 
-* Display as plain text
-* No hyperlink
-* No validation warning
+Render as plain text.
+
+Require explicit user selection during edit mode.
 
 ---
 
-## No Owners
+# Unassigned State
 
 Display:
 
@@ -284,45 +384,43 @@ Display:
 Unassigned
 ```
 
-with muted styling.
-
----
-
-# Entering Edit Mode
-
-Users can enter edit mode by:
-
-* Double-clicking the cell
-* Clicking an edit icon
-* Pressing Enter while focused
-
-No modal dialogs.
-
-Editing must happen inline inside the table.
+using muted styling.
 
 ---
 
 # Edit Mode
 
-Display owners as removable tags.
+Users can enter edit mode by:
+
+* Double-click
+* Edit icon
+* Pressing Enter while focused
+
+Editing must occur inline.
+
+No modal dialogs.
+
+---
+
+# Editable Tags
 
 Example:
 
 ```text
 John Smith ×
-Vendor Team ×
+Architecture Team ×
 ```
 
 Requirements:
 
-* Remove instantly
+* Instant removal
 * Use stopPropagation()
-* Must not trigger Teams links
+* Must not trigger hyperlinks
 * Must not exit edit mode
 
 ---
 
-# Search and Lookup
+# Search and Autocomplete
 
 Typing:
 
@@ -332,15 +430,16 @@ Typing:
 
 opens a dropdown.
 
-Search against:
+Search fields:
 
 * name
 * email
 * podName
 
-Case-insensitive.
+Matching:
 
-Partial matching supported.
+* case-insensitive
+* partial match
 
 ---
 
@@ -377,11 +476,11 @@ John Smith
 Jane Doe
 ```
 
-Pod matches should appear before individual users.
+Pod matches should appear before individual user matches.
 
 ---
 
-# Pod Assignment
+# Pod Expansion
 
 Selecting:
 
@@ -389,7 +488,7 @@ Selecting:
 📁 Payments Pod
 ```
 
-must automatically expand into all pod members.
+must automatically expand into all users belonging to that pod.
 
 Example:
 
@@ -408,50 +507,42 @@ Example:
 
 ---
 
-# Duplicate Prevention
+# Historical Pod Behaviour
 
-Users must not be duplicated.
+Pod assignments are expanded into users during save.
 
-Deduplicate using:
+Persist only expanded users.
+
+Do not persist pod names.
+
+Future pod membership changes must not alter historical RFC ownership records.
+
+---
+
+# Duplicate Detection
+
+Duplicate detection must be case-insensitive.
+
+Deduplicate by:
 
 1. email
-2. user id
+2. id
 3. name
 
----
+Examples:
 
-# Persistence Rule
-
-Do not save pod names.
-
-Persist expanded users only.
-
-Example:
-
-```json
-{
-  "RFC-12345": [
-    {
-      "name": "John Smith",
-      "email": "john.smith@company.com"
-    },
-    {
-      "name": "Jane Doe",
-      "email": "jane.doe@company.com"
-    }
-  ]
-}
+```text
+John Smith
+JOHN SMITH
 ```
 
-This ensures RFC ownership remains stable if pod membership changes later.
+must be treated as the same owner.
 
 ---
 
-# Custom and Unknown Owner Support
+# Custom and Unknown Owners
 
-The following are all valid owners:
-
-## Known User
+All of the following are valid:
 
 ```json
 {
@@ -460,15 +551,11 @@ The following are all valid owners:
 }
 ```
 
-## Unknown User
-
 ```json
 {
   "name": "Michael Johnson"
 }
 ```
-
-## Team
 
 ```json
 {
@@ -476,21 +563,17 @@ The following are all valid owners:
 }
 ```
 
-## Vendor
-
 ```json
 {
   "name": "External Vendor"
 }
 ```
 
-All must be accepted.
-
-None require a lookup match.
+No lookup match is required.
 
 ---
 
-# Add Custom Owner
+# Custom Owner Creation
 
 If no match exists:
 
@@ -508,22 +591,20 @@ Selecting it creates:
 }
 ```
 
-No email required.
-
 ---
 
 # Keyboard Navigation
 
 Support:
 
-* Arrow Down
 * Arrow Up
+* Arrow Down
 * Enter
 * Escape
 * Tab
 * Backspace
 
-Backspace removes last tag when input is empty.
+Backspace removes the last tag when input is empty.
 
 ---
 
@@ -536,7 +617,7 @@ Save
 Cancel
 ```
 
-controls.
+buttons.
 
 ---
 
@@ -548,7 +629,7 @@ Compare:
 originalOwners
 ```
 
-against:
+and
 
 ```typescript
 editedOwners
@@ -556,9 +637,9 @@ editedOwners
 
 Comparison must include:
 
-* length
-* name
-* email
+* count
+* names
+* emails
 * ordering
 
 ---
@@ -573,47 +654,15 @@ If arrays are identical:
 }
 ```
 
-Behavior:
-
-* Exit edit mode
-* No callback
-* No update event
-
----
-
-# Change Scenario
-
-If modified:
-
-```typescript
-onResponsibleChange(
-  rfcNumber,
-  updatedOwners,
-  {
-    hasChanged: true
-  }
-);
-```
-
-Update local state.
-
 Exit edit mode.
 
----
-
-# Cancel Scenario
-
-Cancel must:
-
-* Restore original owners
-* Discard edits
-* Exit edit mode
+Do not trigger persistence.
 
 ---
 
 # Modified RFC Tracking
 
-Maintain a collection containing only changed RFC assignments.
+Track only modified RFC assignments.
 
 Type:
 
@@ -621,53 +670,216 @@ Type:
 Record<string, ResponsibleOwner[]>
 ```
 
+---
+
+# Save Workflow
+
+When Save is clicked:
+
+1. Validate ownership assignments.
+2. Generate modified RFC payload.
+3. Base64 encode payload.
+4. Trigger GitLab pipeline.
+5. Update local React state immediately.
+6. Exit edit mode.
+7. Display success notification.
+
+Example:
+
+```text
+Ownership update submitted successfully.
+```
+
+Users should not wait for GitLab Pages deployment.
+
+Changes should remain visible in the current browser session immediately after Save.
+
+---
+
+# Pipeline Trigger Request
+
+```http
+POST {triggerUrl}
+
+token={triggerToken}
+ref={ownershipBranch}
+variables[OWNERSHIP_UPDATE]={base64EncodedPayload}
+```
+
+Payload must contain only modified RFCs.
+
+---
+
+# Pipeline Trigger Failure
+
+If pipeline trigger fails:
+
+* Keep local edits intact
+* Do not discard ownership changes
+* Display error notification
+* Allow retry
+* Do not overwrite local state
+
+Example:
+
+```text
+Failed to submit ownership update. Please try again.
+```
+
+---
+
+# GitLab Pipeline Stages
+
+```yaml
+stages:
+  - preprocess
+  - fetch-data
+  - build
+  - pages
+```
+
+---
+
+# Branch Restrictions
+
+Ownership processing jobs must run only on:
+
+```text
+feature/owners
+```
+
+Never run on:
+
+* main
+* master
+* merge requests
+* tags
+
+---
+
+# Preprocess Stage
+
+Job:
+
+```text
+process-owner-updates
+```
+
+Responsibilities:
+
+1. Read OWNERSHIP_UPDATE.
+2. Decode payload.
+3. Validate JSON.
+4. Validate RFC keys.
+5. Validate owner names.
+6. Load data/owners.json.
+7. Merge changes.
+8. Remove duplicates.
+9. Sort RFC keys alphabetically.
+10. Save updated file.
+11. Commit changes.
+12. Push feature/owners.
+
+---
+
+# Empty Ownership Handling
+
+RFCs with no owners must remain in owners.json.
+
 Example:
 
 ```json
 {
-  "RFC-12345": [
-    {
-      "name": "John Smith",
-      "email": "john.smith@company.com"
-    }
-  ],
-  "RFC-55555": []
+  "RFC-12345": []
 }
 ```
 
----
-
-# Export Changes
-
-Provide utility:
-
-```typescript
-getModifiedOwnerAssignments()
-```
-
-Returns:
-
-```typescript
-Record<string, ResponsibleOwner[]>
-```
-
-containing only modified RFCs.
+Do not delete RFC keys.
 
 ---
 
-# Future GitLab CI Workflow
+# Merge Strategy
 
-Frontend does not commit files.
+Only update RFCs present in payload.
 
-Future pipeline will:
+Existing RFCs not included in the payload must remain unchanged.
 
-1. Read modified assignments
-2. Generate updated owners.json
-3. Commit changes
-4. Push to feature/owners branch
-5. Rebuild GitLab Pages
+---
 
-Frontend should remain persistence-agnostic.
+# Conflict Resolution
+
+Multiple users may update RFC ownership simultaneously.
+
+Updates are applied RFC-by-RFC.
+
+The latest successfully merged pipeline update becomes authoritative.
+
+Last successful pipeline merge wins.
+
+---
+
+# Commit Message
+
+Example:
+
+```text
+Update RFC ownership assignments
+```
+
+---
+
+# Automation Loop Prevention
+
+The preprocess job must ignore commits authored by the ownership automation account.
+
+Ownership update commits must not trigger ownership processing again.
+
+Use:
+
+* Commit message markers
+* CI rules
+* Commit author validation
+
+to prevent infinite pipeline loops.
+
+---
+
+# Fetch Data Stage
+
+Responsibilities:
+
+Download latest:
+
+```text
+data/users.json
+data/owners.json
+```
+
+Expose files as artifacts for the build stage.
+
+---
+
+# Build Stage
+
+Build React application using the latest ownership and lookup data.
+
+---
+
+# Pages Stage
+
+Publish updated GitLab Pages site.
+
+Ownership updates should become visible after deployment completes.
+
+---
+
+# Auditability
+
+Git history on feature/owners acts as the audit trail.
+
+Every ownership change must be recoverable through commit history.
+
+No database is required.
 
 ---
 
@@ -675,23 +887,19 @@ Frontend should remain persistence-agnostic.
 
 Expected scale:
 
-* 500+ RFC rows
+* 500+ RFCs
 * 1000+ users
 * 50+ pods
 
-Requirements:
-
 Use:
 
-```typescript
-React.memo()
-useMemo()
-useCallback()
-```
+* React.memo
+* useMemo
+* useCallback
 
-Avoid full-table rerenders.
+Virtualize large dropdown lists.
 
-Virtualize dropdown when results exceed 50 items.
+Avoid full table rerenders.
 
 ---
 
@@ -707,7 +915,7 @@ Support:
 
 ---
 
-# Required Files
+# Required Deliverables
 
 ## Components
 
@@ -730,6 +938,7 @@ src/utils/areOwnersEqual.ts
 src/utils/resolveOwner.ts
 src/utils/buildTeamsLink.ts
 src/utils/exportModifiedAssignments.ts
+src/utils/triggerOwnershipPipeline.ts
 ```
 
 ## Types
@@ -747,23 +956,21 @@ data/owners.json
 
 ## Tests
 
-Create unit tests covering:
+Implement unit and integration tests covering:
 
 * Display mode
 * Edit mode
+* Lookup resolution
 * Teams links
-* Email resolution
-* Search filtering
-* Pod lookup
+* Pod search
 * Pod expansion
+* Unknown users
+* Custom owners
 * Duplicate prevention
-* Custom owner creation
-* Unknown user assignment
-* Save behavior
-* Cancel behavior
+* Save workflow
+* Pipeline trigger
 * Change detection
 * Export generation
 * Keyboard navigation
-
-```
-```
+* Accessibility
+* Concurrency handling
