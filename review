@@ -1,1 +1,92 @@
-Why You Stay CompliantThe Trigger Principle: Your account holds a legitimate, assigned GitLab Duo Pro seat. When the automatic setting or your CI script posts the /assign_reviewer @GitLabDuo action, the system executes that request on your behalf as the Maintainer.No Account Sharing: Compliance violations only happen if you share your actual login username, password, or Personal Access Tokens with other human developers so they can pretend to be you.Built-in Intent: GitLab designed the project-wide automatic review setting precisely so that maintainers and project leads can enforce standardized AI quality gates on all code entering their repository.A Quick Warning on GitLab Credits (As of 2026)Keep an eye on how your reviews behave. Under GitLab's updated architecture:GitLab Duo Code Review: This is single-pass. It is covered under your standard Pro/Enterprise seat assignment.Code Review Flow: If your pipeline triggers GitLab's advanced multi-step agentic review, it attributes consumption to the user triggering the flow and draws from GitLab Credits (which are allocated monthly to Premium/Ultimate tiers).
+# GitLab Duo Pro License & Code Review Workflow
+
+## 1. Product Overview & Core Licensing Details
+**GitLab Duo Pro** is a paid AI add-on subscription providing advanced capabilities like Code Suggestions, agentic chat, and automatic code reviews.
+
+*   **Prerequisites:** Requires an active paid **GitLab Premium** or **GitLab Ultimate** base subscription. It cannot be added to a GitLab Free tier subscription.
+*   **Pricing:** Costs **\$19 per user per month**.
+*   **Seat Assignment:** It is a seat-based add-on license. Group owners or administrators must explicitly purchase and assign Duo Pro seats to the specific users who need access.
+*   **Deployment Options:** Supported across GitLab SaaS (GitLab.com), Self-Managed, and GitLab Dedicated environments.
+*   **Official FAQ:** For underlying billing queries, review the [GitLab Licensing and Subscription FAQ](https://gitlab.com).
+
+---
+
+## 2. Onboarding Checklist for Teams
+
+### For the Owner/Admin (License Allocation)
+1. Log in to the **GitLab Customers Portal** and purchase your Duo Pro seats.
+2. Navigate to your top-level **Group**.
+3. Go to **Settings > Usage Quotas > GitLab Duo** (or **Seats** tab).
+4. Click **Add Seats** and assign licenses to your developers' usernames.
+5. Go to **Settings > General**, expand **Permissions and group features**, and ensure **Experiment and Beta features** or **GitLab Duo features** are enabled.
+
+### For the Project Maintainer (Repository Setup)
+1. Go to your project repository's homepage.
+2. Select **Settings > General** from the left sidebar.
+3. Expand **Permissions, LFS, visibility**.
+4. Locate the **GitLab Duo** or **AI features** toggle, turn it **On**, and save changes. See the [Control GitLab Duo Availability Guide](https://gitlab.com) for details.
+
+### For the Developer (IDE Connection)
+1. Open your IDE's extension marketplace (VS Code, JetBrains, or Visual Studio).
+2. Install the **GitLab Workflow** extension.
+3. Generate a Personal Access Token (PAT) with `api` and `read_user` scopes.
+4. Authenticate the extension using your token.
+5. Verify setup by checking the GitLab icon or status bar in the bottom right corner of the IDE. Detailed configurations can be found in the [GitLab Code Suggestions Setup Documentation](https://gitlab.com).
+
+---
+
+## 3. Workflow: Code Reviews for Unlicensed Teams
+
+If your development team does not have individual Duo Pro seats, they can still open Merge Requests (MRs) and have their code reviewed by your Duo Pro capabilities. 
+
+### Option A: The Native Project Setting (No Code Needed)
+As a Maintainer, you can enforce automatic, repository-wide AI reviews:
+1. Navigate to your project's **Settings > Merge requests**.
+2. Scroll to the **GitLab Duo Code Review** section.
+3. Check **"Enable automatic reviews by GitLab Duo"**.
+4. Save changes.
+*Result: Every time an unlicensed dev opens an MR, GitLab Duo automatically performs a first-pass review. For configuration details, visit the official [GitLab Duo Code Review Guide](https://gitlab.com) and [Code Review Flow Documentation](https://gitlab.com).*
+
+### Option B: The Automated Pipeline Trigger (`.gitlab-ci.yml`)
+If your organization requires initiating this via a CI/CD pipeline, you can pass a custom API request. Save your Maintainer PAT (which holds the Duo Pro license) as a masked, protected CI/CD variable named `GITLAB_API_TOKEN`.
+
+Add the following to your pipeline configuration:
+```yaml
+stages:
+  - automation
+
+trigger_duo_review:
+  stage: automation
+  image: curlimages/curl:latest
+  script:
+    - |
+      echo "Triggering GitLab Duo review via Quick Action API..."
+      curl --request POST \
+        --header "PRIVATE-TOKEN: \${GITLAB_API_TOKEN}" \
+        --header "Content-Type: application/json" \
+        --data "{\"body\": \"/assign_reviewer @GitLabDuo\"}" \
+        "\${CI_API_V4_URL}/projects/\({CI_PROJECT_ID}/merge_requests/\){CI_MERGE_REQUEST_IID}/notes"
+  rules:
+    - if: '\$CI_PIPELINE_SOURCE == "merge_request_event"'
+```
+
+### Directing the AI's Behavior
+You can dictate exactly how Duo reviews your team's code by adding a file named `.gitlab/duo/mr-review-instructions.yaml` to the root of your repository:
+```yaml
+instructions:
+  - instruction_name: "Check security and style"
+    prompt: "Ensure no hardcoded API keys are present and code follows standard naming conventions."
+```
+*Note: To link this config file globally to your team, map it inside your group portal by following the [Customizing Review Instructions Guide](https://gitlab.com).*
+
+---
+
+## 4. Compliance & Licensing Verification
+
+**Are you compliant using your Maintainer license to review unlicensed developer code via CI automation or downstream bots?**
+
+### ✅ Yes, this setup is fully compliant.
+
+*   **The Trigger Principle:** GitLab's licensing terms dictate that compliance relies on **who triggers the AI action**, not who wrote the underlying source code. Because the pipeline/bot uses a Personal Access Token (PAT) belonging to *your* unique, licensed account, the consumption is valid.
+*   **No Multi-User "Credentials Pooling":** A compliance violation only occurs if multiple unlicensed human developers share your actual username/password or inject your PAT into their local personal IDEs to gain active code suggestions. Per the [GitLab Subscription FAQ](https://gitlab.com), seats are tied to active user capacity; your pipeline setup serves as a system function rather than a generic credential pool.
+*   **System Actions are Allowed:** Utilizing a token inside an isolated downstream automation pipeline to call a project feature is categorized as a system/bot action, which is a permitted architecture under standard GitLab Subscription terms.
